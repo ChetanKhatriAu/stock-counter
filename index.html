@@ -10,11 +10,10 @@
         h3 { text-align: center; margin: 4px 0; color: #2c3e50; font-size: 16px; }
         .card { background: white; padding: 10px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 8px; }
         
-        /* Compact Micro Camera View Box */
+        /* Strict Compact Micro Camera Boundaries */
         #scanner-wrapper { width: 100%; max-width: 280px; height: 140px; margin: 0 auto; overflow: hidden; border-radius: 8px; position: relative; border: 2px solid #cbd5e1; background-color: #f1f5f9; display: flex; align-items: center; justify-content: center; }
-        #reader { width: 100% !important; height: 100% !important; border: none !important; }
+        #reader { width: 100% !important; height: 100% !important; }
         #reader video { width: 100% !important; height: 100% !important; object-fit: cover !important; }
-        #reader__dashboard { display: none !important; } 
 
         .flex-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
         .flex-child { flex: 1; }
@@ -29,8 +28,7 @@
         button { background-color: #3b82f6; color: white; border: none; font-weight: bold; cursor: pointer; }
         button:active { background-color: #2563eb; }
         
-        /* Action Buttons */
-        .btn-camera { background-color: #4f46e5; padding: 10px; font-size: 15px; margin-bottom: 4px; }
+        .btn-camera { background-color: #4f46e5; padding: 12px; font-size: 16px; margin-bottom: 6px; display: block; }
         .btn-camera:active { background-color: #4338ca; }
         .btn-add { background-color: #10b981; margin-top: 6px; padding: 10px; font-size: 16px; }
         .btn-add:active { background-color: #059669; }
@@ -52,8 +50,7 @@
 
         .flash-success { animation: flash 0.3s alternate 2; }
         @keyframes flash { from { background-color: white; } to { background-color: #a7f3d0; } }
-        
-        #cameraPromptText { color: #64748b; font-size: 13px; text-align: center; font-weight: 500; }
+        #cameraPromptText { color: #64748b; font-size: 13px; text-align: center; font-weight: 500; padding: 10px; }
     </style>
 </head>
 <body>
@@ -62,10 +59,10 @@
     <div id="fileBanner" class="filename-banner">File: Loading...</div>
 
     <div class="card" style="padding: 4px; text-align: center;">
-        <button id="startCamBtn" class="btn-camera" onclick="initScanner()">📷 Start Camera Scanner</button>
+        <button id="startCamBtn" class="btn-camera" onclick="startDirectCamera()">📷 Start Camera Scanner</button>
         <div id="scanner-wrapper">
-            <div id="cameraPromptText">Camera Standby...<br>Tap the button above to start.</div>
-            <div id="reader" style="display:none;"></div>
+            <div id="cameraPromptText">Camera Standby...<br>Tap the button above to authorize scan stream.</div>
+            <div id="reader"></div>
         </div>
         <div class="feedback-container">
             <label><input type="checkbox" id="chkBeep" checked> 🔊 Beep Once</label>
@@ -123,9 +120,9 @@
         let scannedItems = [];
         let currentFileName = "";
         let isScannerLocked = false; 
-        let html5QrcodeScanner = null;
+        let html5QrCode = null;
 
-        // Fix mobile safari audio permission gating
+        // Break Apple iOS audio background playback lockouts
         document.body.addEventListener('touchstart', function() {
             let audio = document.getElementById('audioBeep');
             audio.play().then(() => audio.pause()).catch(() => {});
@@ -147,25 +144,31 @@
             }
         });
 
-        // Safe User-Action Triggered Camera Initialization
-        function initScanner() {
+        // Direct Core Level Camera Initialization Framework
+        function startDirectCamera() {
             document.getElementById('cameraPromptText').style.display = 'none';
-            document.getElementById('reader').style.display = 'block';
             document.getElementById('startCamBtn').style.display = 'none';
-
-            html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
+            
+            // Allocate a hard instance to our specific view element
+            html5QrCode = new Html5QrCode("reader");
+            
+            let config = { 
                 fps: 30, 
                 qrbox: { width: 250, height: 130 },
-                aspectRatio: 1.0,
-                formatsToSupport: [
-                    Html5QrcodeSupportedFormats.EAN_13,
-                    Html5QrcodeSupportedFormats.EAN_8,
-                    Html5QrcodeSupportedFormats.UPC_A,
-                    Html5QrcodeSupportedFormats.CODE_128
-                ]
-            }, false);
+                aspectRatio: 1.0
+            };
 
-            html5QrcodeScanner.render(onScanSuccess, () => {});
+            // Command the mobile device hardware to activate the back camera directly
+            html5QrCode.start(
+                { facingMode: "environment" }, 
+                config, 
+                onScanSuccess, 
+                () => {} // Quiet drop frame scan misses
+            ).catch(err => {
+                alert("Camera Initialization Error: Make sure browser permissions are granted for this site.");
+                document.getElementById('cameraPromptText').style.display = 'block';
+                document.getElementById('startCamBtn').style.display = 'block';
+            });
         }
 
         function onScanSuccess(decodedText) {
@@ -186,7 +189,7 @@
                 setTimeout(() => card.classList.remove('flash-success'), 400);
             }
 
-            // Lockout delay window to ensure a clean single beep
+            // Lockout security window to guarantee a clean single beep
             setTimeout(() => { isScannerLocked = false; }, 1500);
             document.getElementById('qty').focus();
         }
@@ -211,7 +214,7 @@
                 scannedItems.push({ barcode: barcode, qty: qty });
             }
 
-            // Background Autosave
+            // Instant Background Auto-saving
             localStorage.setItem('sc_data', JSON.stringify(scannedItems));
             
             updateTableUI();
