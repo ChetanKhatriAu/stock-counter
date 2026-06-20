@@ -10,10 +10,14 @@
         h3 { text-align: center; margin: 4px 0; color: #2c3e50; font-size: 16px; }
         .card { background: white; padding: 10px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 8px; }
         
-        /* Strict Compact Micro Camera Boundaries */
-        #scanner-wrapper { width: 100%; max-width: 280px; height: 140px; margin: 0 auto; overflow: hidden; border-radius: 8px; position: relative; border: 2px solid #cbd5e1; background-color: #f1f5f9; display: flex; align-items: center; justify-content: center; }
-        #reader { width: 100% !important; height: 100% !important; }
-        #reader video { width: 100% !important; height: 100% !important; object-fit: cover !important; }
+        /* FORCE CSS RESIZING ON WORKING ENGINE 
+           This limits the view window to a compact header banner without breaking the camera loop.
+        */
+        #reader { width: 100% !important; max-width: 280px !important; margin: 0 auto !important; border: 2px solid #cbd5e1 !important; border-radius: 8px !important; overflow: hidden !important; }
+        #reader video { width: 100% !important; height: 140px !important; object-fit: cover !important; }
+        #reader__dashboard { padding: 6px !important; background: #f8fafc !important; font-size: 12px !important; }
+        #reader__dashboard_section_csr button { padding: 6px 12px !important; font-size: 13px !important; font-weight: bold !important; background-color: #4f46e5 !important; color: white !important; border: none !important; border-radius: 4px !important; }
+        #reader__status_span { font-size: 11px !important; }
 
         .flex-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
         .flex-child { flex: 1; }
@@ -25,21 +29,22 @@
         .feedback-container label { display: flex; align-items: center; gap: 4px; margin: 0; cursor: pointer; color: #334155; }
         .feedback-container input { width: auto; }
 
-        button { background-color: #3b82f6; color: white; border: none; font-weight: bold; cursor: pointer; }
-        button:active { background-color: #2563eb; }
+        button { color: white; border: none; font-weight: bold; cursor: pointer; }
         
-        .btn-camera { background-color: #4f46e5; padding: 12px; font-size: 16px; margin-bottom: 6px; display: block; }
-        .btn-camera:active { background-color: #4338ca; }
         .btn-add { background-color: #10b981; margin-top: 6px; padding: 10px; font-size: 16px; }
         .btn-add:active { background-color: #059669; }
         
         .qty-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 4px; }
         .qty-grid button { background-color: #64748b; font-size: 13px; padding: 6px 0; }
+        .qty-grid button:active { background-color: #475569; }
         .qty-grid button.minus { background-color: #ef4444; }
+        .qty-grid button.minus:active { background-color: #dc2626; }
 
         .export-grid { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: 8px; }
         .btn-email-csv { background-color: #0ea5e9; padding: 12px; font-size: 15px; }
+        .btn-email-csv:active { background-color: #0284c7; }
         .btn-clear { background-color: #dc2626; margin-top: 4px; font-size: 12px; padding: 6px; }
+        .btn-clear:active { background-color: #b91c1c; }
 
         .filename-banner { background: #334155; color: white; padding: 6px; text-align: center; font-weight: bold; border-radius: 6px; margin-bottom: 6px; font-size: 13px; }
         
@@ -50,7 +55,6 @@
 
         .flash-success { animation: flash 0.3s alternate 2; }
         @keyframes flash { from { background-color: white; } to { background-color: #a7f3d0; } }
-        #cameraPromptText { color: #64748b; font-size: 13px; text-align: center; font-weight: 500; padding: 10px; }
     </style>
 </head>
 <body>
@@ -59,11 +63,7 @@
     <div id="fileBanner" class="filename-banner">File: Loading...</div>
 
     <div class="card" style="padding: 4px; text-align: center;">
-        <button id="startCamBtn" class="btn-camera" onclick="startDirectCamera()">📷 Start Camera Scanner</button>
-        <div id="scanner-wrapper">
-            <div id="cameraPromptText">Camera Standby...<br>Tap the button above to authorize scan stream.</div>
-            <div id="reader"></div>
-        </div>
+        <div id="reader"></div>
         <div class="feedback-container">
             <label><input type="checkbox" id="chkBeep" checked> 🔊 Beep Once</label>
             <label><input type="checkbox" id="chkVibrate" checked> 📳 Vibrate/Flash</label>
@@ -74,7 +74,7 @@
         <div class="flex-row">
             <div class="flex-child" style="flex: 2;">
                 <label for="barcode">Barcode / SKU:</label>
-                <input type="text" id="barcode" placeholder="Awaiting Scan...">
+                <input type="text" id="barcode" placeholder="Scanned item text...">
             </div>
             <div class="flex-child">
                 <label for="qty">Qty:</label>
@@ -120,9 +120,8 @@
         let scannedItems = [];
         let currentFileName = "";
         let isScannerLocked = false; 
-        let html5QrCode = null;
 
-        // Break Apple iOS audio background playback lockouts
+        // Override background security locks for audio playback
         document.body.addEventListener('touchstart', function() {
             let audio = document.getElementById('audioBeep');
             audio.play().then(() => audio.pause()).catch(() => {});
@@ -142,36 +141,25 @@
                 scannedItems = JSON.parse(saved);
                 updateTableUI();
             }
+            initOriginalScannerEngine();
         });
 
-        // Direct Core Level Camera Initialization Framework
-        function startDirectCamera() {
-            document.getElementById('cameraPromptText').style.display = 'none';
-            document.getElementById('startCamBtn').style.display = 'none';
-            
-            // Allocate a hard instance to our specific view element
-            html5QrCode = new Html5QrCode("reader");
-            
-            let config = { 
-                fps: 30, 
-                qrbox: { width: 250, height: 130 },
-                aspectRatio: 1.0
-            };
-
-            // Command the mobile device hardware to activate the back camera directly
-            html5QrCode.start(
-                { facingMode: "environment" }, 
-                config, 
-                onScanSuccess, 
-                () => {} // Quiet drop frame scan misses
-            ).catch(err => {
-                alert("Camera Initialization Error: Make sure browser permissions are granted for this site.");
-                document.getElementById('cameraPromptText').style.display = 'block';
-                document.getElementById('startCamBtn').style.display = 'block';
-            });
+        // The Original configuration setup that successfully initializes camera hardware
+        function initOriginalScannerEngine() {
+            let html5QrcodeScanner = new Html5QrcodeScanner(
+                "reader", 
+                { 
+                    fps: 15, 
+                    qrbox: { width: 250, height: 130 },
+                    rememberLastUsedCamera: true
+                }, 
+                /* verbose= */ false
+            );
+            html5QrcodeScanner.render(onScanSuccess, () => {});
         }
 
         function onScanSuccess(decodedText) {
+            // Check lockout state to block duplicate loops
             if (isScannerLocked) return;
             isScannerLocked = true;
 
@@ -189,7 +177,7 @@
                 setTimeout(() => card.classList.remove('flash-success'), 400);
             }
 
-            // Lockout security window to guarantee a clean single beep
+            // Exactly 1.5 seconds cooldown window before checking barcodes again
             setTimeout(() => { isScannerLocked = false; }, 1500);
             document.getElementById('qty').focus();
         }
@@ -214,7 +202,7 @@
                 scannedItems.push({ barcode: barcode, qty: qty });
             }
 
-            // Instant Background Auto-saving
+            // Direct Realtime Auto-Saving Entry
             localStorage.setItem('sc_data', JSON.stringify(scannedItems));
             
             updateTableUI();
