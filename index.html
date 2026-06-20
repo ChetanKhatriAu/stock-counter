@@ -5,14 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Stock Counter Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; margin: 0; padding: 8px; background-color: #f4f6f9; color: #333; overflow-x: hidden; }
         h3 { text-align: center; margin: 4px 0; color: #2c3e50; font-size: 16px; }
         .card { background: white; padding: 10px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 8px; }
         
-        /* FORCE CSS RESIZING ON WORKING ENGINE 
-           This limits the view window to a compact header banner without breaking the camera loop.
-        */
+        /* Compact CSS Resizing On The Reliable Camera Hook */
         #reader { width: 100% !important; max-width: 280px !important; margin: 0 auto !important; border: 2px solid #cbd5e1 !important; border-radius: 8px !important; overflow: hidden !important; }
         #reader video { width: 100% !important; height: 140px !important; object-fit: cover !important; }
         #reader__dashboard { padding: 6px !important; background: #f8fafc !important; font-size: 12px !important; }
@@ -38,13 +37,11 @@
         .qty-grid button { background-color: #64748b; font-size: 13px; padding: 6px 0; }
         .qty-grid button:active { background-color: #475569; }
         .qty-grid button.minus { background-color: #ef4444; }
-        .qty-grid button.minus:active { background-color: #dc2626; }
 
-        .export-grid { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: 8px; }
-        .btn-email-csv { background-color: #0ea5e9; padding: 12px; font-size: 15px; }
-        .btn-email-csv:active { background-color: #0284c7; }
-        .btn-clear { background-color: #dc2626; margin-top: 4px; font-size: 12px; padding: 6px; }
-        .btn-clear:active { background-color: #b91c1c; }
+        .export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+        .btn-csv { background-color: #0ea5e9; padding: 10px; font-size: 14px; }
+        .btn-excel { background-color: #16a34a; padding: 10px; font-size: 14px; }
+        .btn-clear { background-color: #dc2626; margin-top: 4px; font-size: 12px; padding: 6px; grid-column: span 2; }
 
         .filename-banner { background: #334155; color: white; padding: 6px; text-align: center; font-weight: bold; border-radius: 6px; margin-bottom: 6px; font-size: 13px; }
         
@@ -74,7 +71,7 @@
         <div class="flex-row">
             <div class="flex-child" style="flex: 2;">
                 <label for="barcode">Barcode / SKU:</label>
-                <input type="text" id="barcode" placeholder="Scanned item text...">
+                <input type="text" id="barcode" placeholder="Awaiting Scan...">
             </div>
             <div class="flex-child">
                 <label for="qty">Qty:</label>
@@ -109,7 +106,8 @@
         </div>
         
         <div class="export-grid">
-            <button class="btn-email-csv" onclick="emailCSVReport()">📧 Export & Email Count</button>
+            <button class="btn-csv" onclick="exportFile('csv')">💾 Save Clean CSV</button>
+            <button class="btn-excel" onclick="exportFile('excel')">📊 Save Real Excel</button>
             <button class="btn-clear" onclick="clearList()">⚠️ Clear All Data</button>
         </div>
     </div>
@@ -121,7 +119,6 @@
         let currentFileName = "";
         let isScannerLocked = false; 
 
-        // Override background security locks for audio playback
         document.body.addEventListener('touchstart', function() {
             let audio = document.getElementById('audioBeep');
             audio.play().then(() => audio.pause()).catch(() => {});
@@ -130,7 +127,7 @@
         window.addEventListener('DOMContentLoaded', () => {
             currentFileName = localStorage.getItem('sc_filename');
             if (!currentFileName) {
-                currentFileName = prompt("Enter File/Batch Name to start:", "Count_" + new Date().toISOString().slice(0,10));
+                currentFileName = prompt("Enter a File Name/Batch Description to start counting:", "Count_" + new Date().toISOString().slice(0,10));
                 if (!currentFileName || currentFileName.trim() === "") currentFileName = "Stock_Count";
                 localStorage.setItem('sc_filename', currentFileName.trim());
             }
@@ -141,25 +138,31 @@
                 scannedItems = JSON.parse(saved);
                 updateTableUI();
             }
-            initOriginalScannerEngine();
+            initScannerEngineWithFormats();
         });
 
-        // The Original configuration setup that successfully initializes camera hardware
-        function initOriginalScannerEngine() {
+        // Rebuilt camera logic to explicitly activate standard retail barcode configurations
+        function initScannerEngineWithFormats() {
             let html5QrcodeScanner = new Html5QrcodeScanner(
                 "reader", 
                 { 
                     fps: 15, 
                     qrbox: { width: 250, height: 130 },
-                    rememberLastUsedCamera: true
-                }, 
-                /* verbose= */ false
+                    rememberLastUsedCamera: true,
+                    formatsToSupport: [
+                        Html5QrcodeSupportedFormats.EAN_13,
+                        Html5QrcodeSupportedFormats.EAN_8,
+                        Html5QrcodeSupportedFormats.UPC_A,
+                        Html5QrcodeSupportedFormats.UPC_E,
+                        Html5QrcodeSupportedFormats.CODE_128,
+                        Html5QrcodeSupportedFormats.CODE_39
+                    ]
+                }, false
             );
             html5QrcodeScanner.render(onScanSuccess, () => {});
         }
 
         function onScanSuccess(decodedText) {
-            // Check lockout state to block duplicate loops
             if (isScannerLocked) return;
             isScannerLocked = true;
 
@@ -177,7 +180,6 @@
                 setTimeout(() => card.classList.remove('flash-success'), 400);
             }
 
-            // Exactly 1.5 seconds cooldown window before checking barcodes again
             setTimeout(() => { isScannerLocked = false; }, 1500);
             document.getElementById('qty').focus();
         }
@@ -202,7 +204,7 @@
                 scannedItems.push({ barcode: barcode, qty: qty });
             }
 
-            // Direct Realtime Auto-Saving Entry
+            // 100% AUTOMATIC BACKGROUND STORAGE PERSISTENCE
             localStorage.setItem('sc_data', JSON.stringify(scannedItems));
             
             updateTableUI();
@@ -229,27 +231,56 @@
             }
         }
 
-        function emailCSVReport() {
+        // Direct Clean Browser File Generation Core
+        function exportFile(format) {
             if (scannedItems.length === 0) {
-                alert("No items to export!");
+                alert("No elements recorded to export.");
                 return;
             }
 
-            let csvContent = "Barcode,Quantity\r\n";
-            scannedItems.forEach(item => {
-                csvContent += `${item.barcode},${item.qty}\r\n`;
-            });
+            let cleanFileName = currentFileName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
 
-            let cleanName = currentFileName.replace(/[^a-z0-9]/gi, '_');
-            let subject = encodeURIComponent(`Stock Report: ${currentFileName}`);
-            let emailBody = encodeURIComponent(
-                "Hi Team,\n\nPlease find the completed stock count data matrix below:\n\n" + csvContent
-            );
-            
-            let destination = prompt("Enter manager's email address to send report:", "");
-            if (destination === null) return; 
+            if (format === 'csv') {
+                // Generates clean CSV strings strictly containing data fields
+                let csvRows = ["Barcode,Quantity"];
+                scannedItems.forEach(item => {
+                    csvRows.push(`${item.barcode},${item.qty}`);
+                });
+                let blob = new Blob([csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
+                triggerDownload(blob, `${cleanFileName}.csv`);
+            } 
+            else if (format === 'excel') {
+                // Compiles data grid straight into structural workbook values (.xlsx)
+                let worksheetData = [["Barcode", "Quantity"]];
+                scannedItems.forEach(item => worksheetData.push([item.barcode, item.qty]));
+                
+                let wb = XLSX.utils.book_new();
+                let ws = XLSX.utils.aoa_to_sheet(worksheetData);
+                XLSX.utils.book_append_sheet(wb, ws, "Stock Take");
+                
+                let wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'binary' });
+                function s2ab(s) {
+                    let buf = new ArrayBuffer(s.length);
+                    let view = new Uint8Array(buf);
+                    for (let i=0; i<s.length; i++) view[i] = s.charCodeAt(i) & 0xFF;
+                    return buf;
+                }
+                let blob = new Blob([s2ab(wbout)], { type: "application/octet-stream" });
+                triggerDownload(blob, `${cleanFileName}.xlsx`);
+            }
+        }
 
-            window.location.href = `mailto:${destination}?subject=${subject}&body=${emailBody}`;
+        function triggerDownload(blob, name) {
+            let link = document.createElement("a");
+            if (link.download !== undefined) {
+                let url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", name);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
         }
     </script>
 </body>
