@@ -10,11 +10,11 @@
         h3 { text-align: center; margin: 4px 0; color: #2c3e50; font-size: 16px; }
         .card { background: white; padding: 10px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 8px; }
         
-        /* Fixed Micro Camera View Window - No Scrolling Needed */
-        #scanner-wrapper { width: 100%; max-width: 280px; height: 140px; margin: 0 auto; overflow: hidden; border-radius: 8px; position: relative; border: 2px solid #cbd5e1; }
+        /* Compact Micro Camera View Box */
+        #scanner-wrapper { width: 100%; max-width: 280px; height: 140px; margin: 0 auto; overflow: hidden; border-radius: 8px; position: relative; border: 2px solid #cbd5e1; background-color: #f1f5f9; display: flex; align-items: center; justify-content: center; }
         #reader { width: 100% !important; height: 100% !important; border: none !important; }
         #reader video { width: 100% !important; height: 100% !important; object-fit: cover !important; }
-        #reader__dashboard { display: none !important; } /* Hide library UI text */
+        #reader__dashboard { display: none !important; } 
 
         .flex-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
         .flex-child { flex: 1; }
@@ -28,6 +28,10 @@
 
         button { background-color: #3b82f6; color: white; border: none; font-weight: bold; cursor: pointer; }
         button:active { background-color: #2563eb; }
+        
+        /* Action Buttons */
+        .btn-camera { background-color: #4f46e5; padding: 10px; font-size: 15px; margin-bottom: 4px; }
+        .btn-camera:active { background-color: #4338ca; }
         .btn-add { background-color: #10b981; margin-top: 6px; padding: 10px; font-size: 16px; }
         .btn-add:active { background-color: #059669; }
         
@@ -46,9 +50,10 @@
         th { background-color: #f1f5f9; }
         .table-wrapper { max-height: 110px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 6px; }
 
-        /* Scan success flash animation */
         .flash-success { animation: flash 0.3s alternate 2; }
         @keyframes flash { from { background-color: white; } to { background-color: #a7f3d0; } }
+        
+        #cameraPromptText { color: #64748b; font-size: 13px; text-align: center; font-weight: 500; }
     </style>
 </head>
 <body>
@@ -57,8 +62,10 @@
     <div id="fileBanner" class="filename-banner">File: Loading...</div>
 
     <div class="card" style="padding: 4px; text-align: center;">
+        <button id="startCamBtn" class="btn-camera" onclick="initScanner()">📷 Start Camera Scanner</button>
         <div id="scanner-wrapper">
-            <div id="reader"></div>
+            <div id="cameraPromptText">Camera Standby...<br>Tap the button above to start.</div>
+            <div id="reader" style="display:none;"></div>
         </div>
         <div class="feedback-container">
             <label><input type="checkbox" id="chkBeep" checked> 🔊 Beep Once</label>
@@ -116,8 +123,9 @@
         let scannedItems = [];
         let currentFileName = "";
         let isScannerLocked = false; 
+        let html5QrcodeScanner = null;
 
-        // Fix mobile browser audio blocking policies
+        // Fix mobile safari audio permission gating
         document.body.addEventListener('touchstart', function() {
             let audio = document.getElementById('audioBeep');
             audio.play().then(() => audio.pause()).catch(() => {});
@@ -137,11 +145,15 @@
                 scannedItems = JSON.parse(saved);
                 updateTableUI();
             }
-            initScanner();
         });
 
+        // Safe User-Action Triggered Camera Initialization
         function initScanner() {
-            let html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
+            document.getElementById('cameraPromptText').style.display = 'none';
+            document.getElementById('reader').style.display = 'block';
+            document.getElementById('startCamBtn').style.display = 'none';
+
+            html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
                 fps: 30, 
                 qrbox: { width: 250, height: 130 },
                 aspectRatio: 1.0,
@@ -157,13 +169,11 @@
         }
 
         function onScanSuccess(decodedText) {
-            // Stop scanning spam loop triggers
             if (isScannerLocked) return;
             isScannerLocked = true;
 
             document.getElementById('barcode').value = decodedText;
             
-            // Handle feedback modes
             if (document.getElementById('chkBeep').checked) {
                 let audio = document.getElementById('audioBeep');
                 audio.currentTime = 0;
@@ -171,15 +181,13 @@
             }
             if (document.getElementById('chkVibrate').checked) {
                 if (navigator.vibrate) navigator.vibrate(100);
-                // Visual layout confirmation flash for iOS devices
                 let card = document.getElementById('inputCard');
                 card.classList.add('flash-success');
                 setTimeout(() => card.classList.remove('flash-success'), 400);
             }
 
-            // Lockout delay window to reset scan capture state
+            // Lockout delay window to ensure a clean single beep
             setTimeout(() => { isScannerLocked = false; }, 1500);
-
             document.getElementById('qty').focus();
         }
 
@@ -203,7 +211,7 @@
                 scannedItems.push({ barcode: barcode, qty: qty });
             }
 
-            // AUTOMATIC BACKGROUND SAVE: Happens on click without waiting
+            // Background Autosave
             localStorage.setItem('sc_data', JSON.stringify(scannedItems));
             
             updateTableUI();
@@ -230,14 +238,12 @@
             }
         }
 
-        // Direct System Mail Transfer Framework
         function emailCSVReport() {
             if (scannedItems.length === 0) {
                 alert("No items to export!");
                 return;
             }
 
-            // Create clean CSV plain data structure
             let csvContent = "Barcode,Quantity\r\n";
             scannedItems.forEach(item => {
                 csvContent += `${item.barcode},${item.qty}\r\n`;
@@ -245,13 +251,10 @@
 
             let cleanName = currentFileName.replace(/[^a-z0-9]/gi, '_');
             let subject = encodeURIComponent(`Stock Report: ${currentFileName}`);
-            
-            // Format body content cleanly for direct copy-paste or immediate parsing
             let emailBody = encodeURIComponent(
                 "Hi Team,\n\nPlease find the completed stock count data matrix below:\n\n" + csvContent
             );
             
-            // Prompt user for delivery target and trigger platform intent client
             let destination = prompt("Enter manager's email address to send report:", "");
             if (destination === null) return; 
 
