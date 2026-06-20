@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Counter</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 15px; background-color: #f4f6f9; color: #333; }
+        h2 { text-align: center; margin-bottom: 20px; color: #2c3e50; }
+        .card { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 15px; }
+        #reader { width: 100%; border: none !important; }
+        input, button { width: 100%; padding: 12px; margin: 8px 0; box-sizing: border-box; border-radius: 6px; border: 1px solid #ccc; font-size: 16px; }
+        button { background-color: #3498db; color: white; border: none; font-weight: bold; cursor: pointer; }
+        button:active { background-color: #2980b9; }
+        .btn-email { background-color: #2ecc71; margin-top: 15px; }
+        .btn-email:active { background-color: #27ae60; }
+        .btn-clear { background-color: #e74c3c; }
+        .btn-clear:active { background-color: #c0392b; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 14px; }
+        th { background-color: #ecf0f1; }
+    </style>
+</head>
+<body>
+
+    <h2>📦 Stock Counter</h2>
+
+    <div class="card">
+        <div id="reader"></div>
+    </div>
+
+    <div class="card">
+        <label for="barcode"><b>Barcode / SKU:</b></label>
+        <input type="text" id="barcode" placeholder="Scanned or typed code">
+        
+        <label for="qty"><b>Quantity:</b></label>
+        <input type="number" id="qty" value="1" min="1">
+        
+        <button onclick="addItem()">Add to Count</button>
+    </div>
+
+    <div class="card">
+        <h3>Current Session Scan List</h3>
+        <div style="overflow-x:auto;">
+            <table id="stockTable">
+                <thead>
+                    <tr>
+                        <th>Barcode</th>
+                        <th>Qty</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <button class="btn-email" onclick="emailCSV()">📧 Email CSV Report</button>
+        <button class="btn-clear" onclick="clearList()" style="margin-top: 10px;">Clear All</button>
+    </div>
+
+    <script>
+        let scannedItems = [];
+
+        // Initialize Barcode Scanner
+        function onScanSuccess(decodedText, decodedResult) {
+            document.getElementById('barcode').value = decodedText;
+            // Provide subtle audio or haptic feedback if supported
+            if (navigator.vibrate) navigator.vibrate(100);
+            document.getElementById('qty').focus();
+            document.getElementById('qty').select();
+        }
+
+        function onScanFailure(error) {
+            // Quietly handle scan misses to avoid flooding logs
+        }
+
+        let html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader", { fps: 10, qrbox: {width: 250, height: 150} }, /* verbose= */ false);
+        html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+
+        // Add Item to local array and update UI
+        function addItem() {
+            let barcode = document.getElementById('barcode').value.trim();
+            let qty = parseInt(document.getElementById('qty').value);
+
+            if (!barcode || isNaN(qty) || qty <= 0) {
+                alert('Please enter a valid barcode and quantity.');
+                return;
+            }
+
+            // Check if item already scanned in this session, if so add quantities together
+            let existingItem = scannedItems.find(item => item.barcode === barcode);
+            if (existingItem) {
+                existingItem.qty += qty;
+            } else {
+                scannedItems.push({ barcode: barcode, qty: qty });
+            }
+
+            updateTable();
+            
+            // Reset fields for next scan
+            document.getElementById('barcode').value = '';
+            document.getElementById('qty').value = '1';
+        }
+
+        function updateTable() {
+            let tbody = document.querySelector('#stockTable tbody');
+            tbody.innerHTML = '';
+            scannedItems.forEach(item => {
+                let row = `<tr><td>${item.barcode}</td><td>${item.qty}</td></tr>`;
+                tbody.innerHTML += row;
+            });
+        }
+
+        function clearList() {
+            if (confirm("Are you sure you want to clear the current list?")) {
+                scannedItems = [];
+                updateTable();
+            }
+        }
+
+        // Generate CSV and open user's native email client with file attached or text formatted
+        function emailCSV() {
+            if (scannedItems.length === 0) {
+                alert("No items to export!");
+                return;
+            }
+
+            let csvContent = "Barcode,Quantity\n";
+            scannedItems.forEach(item => {
+                csvContent += `"${item.barcode}",${item.qty}\n`;
+            });
+
+            let managerEmail = prompt("Enter email address to send report to:");
+            if (!managerEmail) return;
+
+            // Using standard mailto format to open native mail app (iOS Mail / Gmail App)
+            let subject = encodeURIComponent("Stock Count Report - " + new Date().toLocaleDateString());
+            let body = encodeURIComponent("Hi,\n\nPlease find the copy-pasteable stock count data below:\n\n" + csvContent);
+            
+            window.location.href = `mailto:${managerEmail}?subject=${subject}&body=${body}`;
+        }
+    </script>
+</body>
+</html>
