@@ -3,141 +3,287 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stock Counter</title>
+    <title>Stock Counter Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 15px; background-color: #f4f6f9; color: #333; }
-        h2 { text-align: center; margin-bottom: 20px; color: #2c3e50; }
-        .card { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 15px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; margin: 0; padding: 10px; background-color: #f4f6f9; color: #333; }
+        h3 { text-align: center; margin: 5px 0 10px 0; color: #2c3e50; }
+        .card { background: white; padding: 12px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); margin-bottom: 10px; }
+        
+        /* Compact Camera Container Fix */
+        #scanner-wrapper { max-width: 320px; margin: 0 auto; overflow: hidden; border-radius: 8px; }
         #reader { width: 100%; border: none !important; }
-        input, button { width: 100%; padding: 12px; margin: 8px 0; box-sizing: border-box; border-radius: 6px; border: 1px solid #ccc; font-size: 16px; }
-        button { background-color: #3498db; color: white; border: none; font-weight: bold; cursor: pointer; }
-        button:active { background-color: #2980b9; }
-        .btn-email { background-color: #2ecc71; margin-top: 15px; }
-        .btn-email:active { background-color: #27ae60; }
-        .btn-clear { background-color: #e74c3c; }
-        .btn-clear:active { background-color: #c0392b; }
+        #reader video { object-fit: cover !important; }
+
+        .flex-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+        .flex-child { flex: 1; }
+        
+        label { font-weight: bold; font-size: 14px; color: #475569; display: block; margin-bottom: 4px; }
+        input, button { width: 100%; padding: 10px; box-sizing: border-box; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 16px; }
+        
+        /* Feedback Selectors */
+        .feedback-container { display: flex; justify-content: space-around; margin: 8px 0; font-size: 14px; background: #e2e8f0; padding: 6px; border-radius: 6px; }
+        .feedback-container label { display: flex; align-items: center; gap: 5px; margin: 0; cursor: pointer; }
+        .feedback-container input { width: auto; }
+
+        /* Button Grid Styling */
+        button { background-color: #3b82f6; color: white; border: none; font-weight: bold; cursor: pointer; transition: background 0.1s; }
+        button:active { background-color: #2563eb; }
+        .btn-add { background-color: #10b981; margin-top: 5px; padding: 12px; }
+        .btn-add:active { background-color: #059669; }
+        
+        .qty-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 8px; }
+        .qty-grid button { background-color: #64748b; font-size: 14px; padding: 8px 0; }
+        .qty-grid button:active { background-color: #475569; }
+        .qty-grid button.minus { background-color: #ef4444; }
+        .qty-grid button.minus:active { background-color: #dc2626; }
+
+        .export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+        .btn-csv { background-color: #0ea5e9; }
+        .btn-excel { background-color: #16a34a; }
+        .btn-clear { background-color: #dc2626; grid-column: span 2; margin-top: 5px; font-size: 14px; padding: 8px; }
+
+        .filename-banner { background: #334155; color: white; padding: 8px; text-align: center; font-weight: bold; border-radius: 6px; margin-bottom: 10px; font-size: 14px; }
+        
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 14px; }
-        th { background-color: #ecf0f1; }
+        th, td { border: 1px solid #e2e8f0; padding: 6px 8px; text-align: left; font-size: 14px; }
+        th { background-color: #f1f5f9; }
+        .table-wrapper { max-height: 180px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 6px; }
     </style>
 </head>
 <body>
 
-    <h2>📦 Stock Counter</h2>
+    <h3>📦 Stock Counter Pro</h3>
+    <div id="fileBanner" class="filename-banner">File: Loading...</div>
 
-    <div class="card">
-        <div id="reader"></div>
+    <div class="card" style="padding: 6px;">
+        <div id="scanner-wrapper">
+            <div id="reader"></div>
+        </div>
+        <div class="feedback-container">
+            <label><input type="checkbox" id="chkBeep" checked> 🔊 Beep</label>
+            <label><input type="checkbox" id="chkVibrate" checked> 📳 Vibrate</label>
+        </div>
     </div>
 
     <div class="card">
-        <label for="barcode"><b>Barcode / SKU:</b></label>
-        <input type="text" id="barcode" placeholder="Scanned or typed code">
-        
-        <label for="qty"><b>Quantity:</b></label>
-        <input type="number" id="qty" value="1" min="1">
-        
-        <button onclick="addItem()">Add to Count</button>
+        <div class="flex-row">
+            <div class="flex-child" style="flex: 2;">
+                <label for="barcode">Barcode / SKU:</label>
+                <input type="text" id="barcode" placeholder="Scan or Type code">
+            </div>
+            <div class="flex-child">
+                <label for="qty">Qty:</label>
+                <input type="number" id="qty" value="1" min="1">
+            </div>
+        </div>
+
+        <div class="qty-grid">
+            <button type="button" class="minus" onclick="adjustQty(-1)">-1</button>
+            <button type="button" onclick="adjustQty(1)">+1</button>
+            <button type="button" onclick="adjustQty(10)">+10</button>
+            <button type="button" onclick="adjustQty(20)">+20</button>
+            <button type="button" onclick="adjustQty(30)">+30</button>
+            <button type="button" onclick="adjustQty(50)">+50</button>
+            <button type="button" onclick="adjustQty(100)">+100</button>
+        </div>
+
+        <button class="btn-add" onclick="addItem()">Confirm & Add to Count</button>
     </div>
 
     <div class="card">
-        <h3>Current Session Scan List</h3>
-        <div style="overflow-x:auto;">
+        <label>Current Count Table:</label>
+        <div class="table-wrapper">
             <table id="stockTable">
                 <thead>
                     <tr>
                         <th>Barcode</th>
-                        <th>Qty</th>
+                        <th>Total Qty</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
             </table>
         </div>
-        <button class="btn-email" onclick="emailCSV()">📧 Email CSV Report</button>
-        <button class="btn-clear" onclick="clearList()" style="margin-top: 10px;">Clear All</button>
+        
+        <div class="export-grid">
+            <button class="btn-csv" onclick="exportData('csv')">💾 Save Clean CSV</button>
+            <button class="btn-excel" onclick="exportData('excel')">📊 Save Real Excel</button>
+            <button class="btn-clear" onclick="clearList()">⚠️ Clear All Data</button>
+        </div>
     </div>
+
+    <audio id="audioBeep" src="https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg" preload="auto"></audio>
 
     <script>
         let scannedItems = [];
+        let currentFileName = "";
 
-        // Initialize Barcode Scanner
-        function onScanSuccess(decodedText, decodedResult) {
+        // Audio initialization workaround for mobile security profiles
+        document.body.addEventListener('touchstart', function() {
+            let audio = document.getElementById('audioBeep');
+            audio.play().then(() => audio.pause()).catch(() => {});
+        }, { once: true });
+
+        // Initialize Session on Startup
+        window.addEventListener('DOMContentLoaded', () => {
+            // Load file layout details
+            currentFileName = localStorage.getItem('sc_filename');
+            if (!currentFileName) {
+                currentFileName = prompt("Enter a File Name/Batch Description to start counting:", "Stock_Count_" + new Date().toISOString().slice(0,10));
+                if (!currentFileName || currentFileName.trim() === "") currentFileName = "Unnamed_Batch";
+                localStorage.setItem('sc_filename', currentFileName.trim());
+            }
+            document.getElementById('fileBanner').innerText = "File: " + currentFileName;
+
+            // Load saved data out of persistent LocalStorage
+            let saved = localStorage.getItem('sc_data');
+            if (saved) {
+                scannedItems = JSON.parse(saved);
+                updateTableUI();
+            }
+            initScanner();
+        });
+
+        // Speed & Performance Enhanced Barcode Scanning Engine
+        function initScanner() {
+            let formats = [
+                Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.EAN_8,
+                Html5QrcodeSupportedFormats.UPC_A,
+                Html5QrcodeSupportedFormats.UPC_E,
+                Html5QrcodeSupportedFormats.CODE_128,
+                Html5QrcodeSupportedFormats.CODE_39
+            ];
+
+            let html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
+                fps: 30, // Max frame capture speed for rapid detection
+                qrbox: { width: 260, height: 130 },
+                aspectRatio: 1.0,
+                formatsToSupport: formats,
+                rememberLastUsedCamera: true
+            }, false);
+
+            html5QrcodeScanner.render(onScanSuccess, () => {});
+        }
+
+        function onScanSuccess(decodedText) {
             document.getElementById('barcode').value = decodedText;
-            // Provide subtle audio or haptic feedback if supported
-            if (navigator.vibrate) navigator.vibrate(100);
+            
+            // Execute feedback choices safely
+            if (document.getElementById('chkVibrate').checked && navigator.vibrate) {
+                navigator.vibrate(120);
+            }
+            if (document.getElementById('chkBeep').checked) {
+                document.getElementById('audioBeep').play().catch(() => {});
+            }
+
             document.getElementById('qty').focus();
-            document.getElementById('qty').select();
         }
 
-        function onScanFailure(error) {
-            // Quietly handle scan misses to avoid flooding logs
+        function adjustQty(amount) {
+            let qtyInput = document.getElementById('qty');
+            let currentVal = parseInt(qtyInput.value) || 0;
+            let targetVal = currentVal + amount;
+            qtyInput.value = targetVal < 1 ? 1 : targetVal;
         }
 
-        let html5QrcodeScanner = new Html5QrcodeScanner(
-            "reader", { fps: 10, qrbox: {width: 250, height: 150} }, /* verbose= */ false);
-        html5QrcodeScanner.render(onScanSuccess, onScanFailure);
-
-        // Add Item to local array and update UI
         function addItem() {
             let barcode = document.getElementById('barcode').value.trim();
-            let qty = parseInt(document.getElementById('qty').value);
+            let qty = parseInt(document.getElementById('qty').value) || 0;
 
-            if (!barcode || isNaN(qty) || qty <= 0) {
-                alert('Please enter a valid barcode and quantity.');
+            if (!barcode || qty <= 0) {
+                alert('Please provide a valid Barcode and Quantity configuration.');
                 return;
             }
 
-            // Check if item already scanned in this session, if so add quantities together
-            let existingItem = scannedItems.find(item => item.barcode === barcode);
-            if (existingItem) {
-                existingItem.qty += qty;
+            let match = scannedItems.find(item => item.barcode === barcode);
+            if (match) {
+                match.qty += qty;
             } else {
                 scannedItems.push({ barcode: barcode, qty: qty });
             }
 
-            updateTable();
+            // Sync structural changes instantly to phone's system hard storage
+            localStorage.setItem('sc_data', JSON.stringify(scannedItems));
             
-            // Reset fields for next scan
+            updateTableUI();
             document.getElementById('barcode').value = '';
             document.getElementById('qty').value = '1';
         }
 
-        function updateTable() {
+        function updateTableUI() {
             let tbody = document.querySelector('#stockTable tbody');
             tbody.innerHTML = '';
             scannedItems.forEach(item => {
-                let row = `<tr><td>${item.barcode}</td><td>${item.qty}</td></tr>`;
-                tbody.innerHTML += row;
+                tbody.innerHTML += `<tr><td>${item.barcode}</td><td><b>${item.qty}</b></td></tr>`;
             });
         }
 
+        // Two-Step Secure Safety Gate for Data Clearance
         function clearList() {
-            if (confirm("Are you sure you want to clear the current list?")) {
-                scannedItems = [];
-                updateTable();
+            let confirmOne = confirm("Are you sure you want to delete the current stock data?");
+            if (confirmOne) {
+                let confirmTwo = confirm("⚠️ LAST WARNING: This cannot be undone. Clear all items and restart app?");
+                if (confirmTwo) {
+                    scannedItems = [];
+                    localStorage.removeItem('sc_data');
+                    localStorage.removeItem('sc_filename');
+                    location.reload(); 
+                }
             }
         }
 
-        // Generate CSV and open user's native email client with file attached or text formatted
-        function emailCSV() {
+        // Professional File Attachment Processing Core
+        function exportData(format) {
             if (scannedItems.length === 0) {
-                alert("No items to export!");
+                alert("The stock register is empty. Nothing to export!");
                 return;
             }
 
-            let csvContent = "Barcode,Quantity\n";
-            scannedItems.forEach(item => {
-                csvContent += `"${item.barcode}",${item.qty}\n`;
-            });
+            let cleanFileName = currentFileName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
 
-            let managerEmail = prompt("Enter email address to send report to:");
-            if (!managerEmail) return;
+            if (format === 'csv') {
+                // Generate clean, comma-separated values without global string quotations
+                let csvRows = ["Barcode,Quantity"];
+                scannedItems.forEach(item => {
+                    csvRows.push(`${item.barcode},${item.qty}`);
+                });
+                let blob = new Blob([csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
+                triggerDownload(blob, `${cleanFileName}.csv`);
+            } 
+            else if (format === 'excel') {
+                // Map to worksheet and bundle cleanly inside true workbook parameters
+                let worksheetData = [["Barcode", "Quantity"]];
+                scannedItems.forEach(item => worksheetData.push([item.barcode, item.qty]));
+                
+                let wb = XLSX.utils.book_new();
+                let ws = XLSX.utils.aoa_to_sheet(worksheetData);
+                XLSX.utils.book_append_sheet(wb, ws, "Inventory Count");
+                
+                let wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'binary' });
+                function s2ab(s) {
+                    let buf = new ArrayBuffer(s.length);
+                    let view = new Uint8Array(buf);
+                    for (let i=0; i<s.length; i++) view[i] = s.charCodeAt(i) & 0xFF;
+                    return buf;
+                }
+                let blob = new Blob([s2ab(wbout)], { type: "application/octet-stream" });
+                triggerDownload(blob, `${cleanFileName}.xlsx`);
+            }
+        }
 
-            // Using standard mailto format to open native mail app (iOS Mail / Gmail App)
-            let subject = encodeURIComponent("Stock Count Report - " + new Date().toLocaleDateString());
-            let body = encodeURIComponent("Hi,\n\nPlease find the copy-pasteable stock count data below:\n\n" + csvContent);
-            
-            window.location.href = `mailto:${managerEmail}?subject=${subject}&body=${body}`;
+        function triggerDownload(blob, name) {
+            let link = document.createElement("a");
+            if (link.download !== undefined) {
+                let url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", name);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
         }
     </script>
 </body>
