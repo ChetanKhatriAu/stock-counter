@@ -38,10 +38,10 @@
         .qty-grid button:active { background-color: #475569; }
         .qty-grid button.minus { background-color: #ef4444; }
 
-        .export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
-        .btn-csv { background-color: #0ea5e9; padding: 10px; font-size: 14px; }
-        .btn-excel { background-color: #16a34a; padding: 10px; font-size: 14px; }
-        .btn-clear { background-color: #dc2626; margin-top: 4px; font-size: 12px; padding: 6px; grid-column: span 2; }
+        .export-grid { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: 8px; }
+        .btn-email { background-color: #0ea5e9; padding: 12px; font-size: 16px; }
+        .btn-email:active { background-color: #0284c7; }
+        .btn-clear { background-color: #dc2626; margin-top: 4px; font-size: 12px; padding: 6px; }
 
         .filename-banner { background: #334155; color: white; padding: 6px; text-align: center; font-weight: bold; border-radius: 6px; margin-bottom: 6px; font-size: 13px; }
         
@@ -106,8 +106,7 @@
         </div>
         
         <div class="export-grid">
-            <button class="btn-csv" onclick="exportFile('csv')">💾 Save Clean CSV</button>
-            <button class="btn-excel" onclick="exportFile('excel')">📊 Save Real Excel</button>
+            <button class="btn-email" onclick="promptEmailFlow()">📧 Export & Email Count</button>
             <button class="btn-clear" onclick="clearList()">⚠️ Clear All Data</button>
         </div>
     </div>
@@ -141,7 +140,7 @@
             initScannerEngineWithFormats();
         });
 
-        // Rebuilt camera logic to explicitly activate standard retail barcode configurations
+        // Expanded format support logic block for standard distribution configurations
         function initScannerEngineWithFormats() {
             let html5QrcodeScanner = new Html5QrcodeScanner(
                 "reader", 
@@ -155,7 +154,8 @@
                         Html5QrcodeSupportedFormats.UPC_A,
                         Html5QrcodeSupportedFormats.UPC_E,
                         Html5QrcodeSupportedFormats.CODE_128,
-                        Html5QrcodeSupportedFormats.CODE_39
+                        Html5QrcodeSupportedFormats.CODE_39,
+                        Html5QrcodeSupportedFormats.ITF
                     ]
                 }, false
             );
@@ -204,7 +204,6 @@
                 scannedItems.push({ barcode: barcode, qty: qty });
             }
 
-            // 100% AUTOMATIC BACKGROUND STORAGE PERSISTENCE
             localStorage.setItem('sc_data', JSON.stringify(scannedItems));
             
             updateTableUI();
@@ -231,32 +230,54 @@
             }
         }
 
-        // Direct Clean Browser File Generation Core
-        function exportFile(format) {
+        // Two-Step Interactive Modal Delivery Trigger
+        function promptEmailFlow() {
             if (scannedItems.length === 0) {
                 alert("No elements recorded to export.");
                 return;
             }
 
+            let typeSelection = prompt("Type 'CSV' for comma file or 'EXCEL' for spreadsheet formatting options:", "EXCEL");
+            if (typeSelection === null) return; 
+            
+            typeSelection = typeSelection.trim().toLowerCase();
+
+            if (typeSelection !== 'csv' && typeSelection !== 'excel') {
+                alert("Invalid format selected. Please type exactly 'CSV' or 'EXCEL'.");
+                return;
+            }
+
+            let destinationMail = prompt("Enter manager or target email address:", "");
+            if (destinationMail === null) return;
+
+            executeFileEmailOutput(typeSelection, destinationMail.trim());
+        }
+
+        function executeFileEmailOutput(format, emailTarget) {
             let cleanFileName = currentFileName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+            let subject = encodeURIComponent(`Stock Count Export: ${currentFileName}`);
+            let bodyText = "";
 
             if (format === 'csv') {
-                // Generates clean CSV strings strictly containing data fields
                 let csvRows = ["Barcode,Quantity"];
                 scannedItems.forEach(item => {
                     csvRows.push(`${item.barcode},${item.qty}`);
                 });
-                let blob = new Blob([csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
-                triggerDownload(blob, `${cleanFileName}.csv`);
+                let csvRawString = csvRows.join("\n");
+                
+                bodyText = `Hi,\n\nPlease find the data matrix metrics for the batch [${currentFileName}] structured cleanly below:\n\n${csvRawString}`;
+                
+                // Triggers local download backup block alongside layout call
+                let blob = new Blob([csvRawString], { type: 'text/csv;charset=utf-8;' });
+                triggerFileBackupDownload(blob, `${cleanFileName}.csv`);
             } 
             else if (format === 'excel') {
-                // Compiles data grid straight into structural workbook values (.xlsx)
                 let worksheetData = [["Barcode", "Quantity"]];
                 scannedItems.forEach(item => worksheetData.push([item.barcode, item.qty]));
                 
                 let wb = XLSX.utils.book_new();
                 let ws = XLSX.utils.aoa_to_sheet(worksheetData);
-                XLSX.utils.book_append_sheet(wb, ws, "Stock Take");
+                XLSX.utils.book_append_sheet(wb, ws, "Inventory Register");
                 
                 let wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'binary' });
                 function s2ab(s) {
@@ -266,11 +287,19 @@
                     return buf;
                 }
                 let blob = new Blob([s2ab(wbout)], { type: "application/octet-stream" });
-                triggerDownload(blob, `${cleanFileName}.xlsx`);
+                triggerFileBackupDownload(blob, `${cleanFileName}.xlsx`);
+
+                // Text version breakdown for prompt safety confirmation fallback
+                let textSummary = "Barcode\tQuantity\n";
+                scannedItems.forEach(item => { textSummary += `${item.barcode}\t${item.qty}\n`; });
+                bodyText = `Hi,\n\nPlease find the spreadsheet file downloaded to your device storage. Summary breakdown below:\n\n${textSummary}`;
             }
+
+            // Launch the mobile phone email engine application window
+            window.location.href = `mailto:${emailTarget}?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
         }
 
-        function triggerDownload(blob, name) {
+        function triggerFileBackupDownload(blob, name) {
             let link = document.createElement("a");
             if (link.download !== undefined) {
                 let url = URL.createObjectURL(blob);
